@@ -46,7 +46,7 @@ class Network(object):
         # If true, the resulting variables are set as trainable
         self.trainable = trainable
         # Switch variable for dropout
-        self.use_dropout = tf.placeholder_with_default(tf.constant(1.0),
+        self.use_dropout = tf.compat.v1.placeholder_with_default(tf.constant(1.0),
                                                        shape=[],
                                                        name='use_dropout')
         self.is_training = is_training
@@ -106,7 +106,7 @@ class Network(object):
 
     def make_var(self, name, shape):
         '''Creates a new TensorFlow variable.'''
-        return tf.get_variable(name, shape, trainable=self.trainable)
+        return tf.compat.v1.get_variable(name, shape, trainable=self.trainable)
 
     def get_layer_name(self):
         return layer_name
@@ -137,7 +137,7 @@ class Network(object):
         c_i = input.get_shape()[-1]
 
         convolve = lambda i, k: tf.nn.conv2d(i, k, [1, s_h, s_w, 1], padding=padding,data_format=DEFAULT_DATAFORMAT)
-        with tf.variable_scope(name) as scope:
+        with tf.compat.v1.variable_scope(name) as scope:
             kernel = self.make_var('weights', shape=[k_h, k_w, c_i, c_o])
             output = convolve(input, kernel)
 
@@ -166,7 +166,7 @@ class Network(object):
         c_i = input.get_shape()[-1]
 
         convolve = lambda i, k: tf.nn.atrous_conv2d(i, k, dilation, padding=padding)
-        with tf.variable_scope(name) as scope:
+        with tf.compat.v1.variable_scope(name) as scope:
             kernel = self.make_var('weights', shape=[k_h, k_w, c_i, c_o])
             output = convolve(input, kernel)
 
@@ -250,7 +250,7 @@ class Network(object):
 
     @layer
     def batch_normalization(self, input, name, scale_offset=True, relu=False):
-        output = tf.layers.batch_normalization(
+        output = tf.compat.v1.layers.batch_normalization(
             input,
             momentum=0.95,
             epsilon=1e-5,
@@ -270,4 +270,4 @@ class Network(object):
 
     @layer
     def resize_bilinear(self, input, size, name):
-        return tf.image.resize_bilinear(input, size=size, align_corners=True, name=name)
+        return tf.compat.v1.image.resize_bilinear(input, size=size, align_corners=True, name=name)

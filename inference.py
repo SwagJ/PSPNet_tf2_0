@@ -7,6 +7,8 @@ import time
 import tensorflow as tf
 import numpy as np
 from scipy import misc
+import imageio
+import matplotlib.pyplot as plt
 
 from model import PSPNet101, PSPNet50
 from tools import *
@@ -53,6 +55,9 @@ def load(saver, sess, ckpt_path):
 def main():
     args = get_arguments()
 
+    # disable eager execution
+    tf.compat.v1.disable_eager_execution()
+
     # load parameters
     if args.dataset == 'ade20k':
         param = ADE20k_param
@@ -71,9 +76,9 @@ def main():
 
     # Create network.
     net = PSPNet({'data': img}, is_training=False, num_classes=num_classes)
-    with tf.variable_scope('', reuse=True):
+    with tf.compat.v1.variable_scope('', reuse=True):
         flipped_img = tf.image.flip_left_right(tf.squeeze(img))
-        flipped_img = tf.expand_dims(flipped_img, dim=0)
+        flipped_img = tf.expand_dims(flipped_img, 0)
         net2 = PSPNet({'data': flipped_img}, is_training=False, num_classes=num_classes)
 
     raw_output = net.layers['conv6']
@@ -85,24 +90,25 @@ def main():
         raw_output = tf.add_n([raw_output, flipped_output])
 
     # Predictions.
-    raw_output_up = tf.image.resize_bilinear(raw_output, size=[h, w], align_corners=True)
+    raw_output_up = tf.compat.v1.image.resize_bilinear(raw_output, size=[h, w], align_corners=True)
     raw_output_up = tf.image.crop_to_bounding_box(raw_output_up, 0, 0, img_shape[0], img_shape[1])
     raw_output_up = tf.argmax(raw_output_up, axis=3)
     pred = decode_labels(raw_output_up, img_shape, num_classes)
     
     # Init tf Session
-    config = tf.ConfigProto()
+    config = tf.compat.v1.ConfigProto()
     config.gpu_options.allow_growth = True
-    sess = tf.Session(config=config)
-    init = tf.global_variables_initializer()
+    sess = tf.compat.v1.Session(config=config)
+    init = tf.compat.v1.global_variables_initializer()
 
     sess.run(init)
     
-    restore_var = tf.global_variables()
-    
-    ckpt = tf.train.get_checkpoint_state(args.checkpoints)
+    restore_var = tf.compat.v1.global_variables()
+
+    print(args.checkpoints)
+    ckpt = tf.train.get_checkpoint_state(args.checkpoints,'checkpoint.txt')
     if ckpt and ckpt.model_checkpoint_path:
-        loader = tf.train.Saver(var_list=restore_var)
+        loader = tf.compat.v1.train.Saver(var_list=restore_var)
         load_step = int(os.path.basename(ckpt.model_checkpoint_path).split('-')[1])
         load(loader, sess, ckpt.model_checkpoint_path)
     else:
@@ -112,7 +118,10 @@ def main():
     
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
-    misc.imsave(args.save_dir + filename, preds[0])
+    print(preds.shape)
+    preds[0] = preds[0].astype(np.uint8)
+    imageio.imwrite(args.save_dir + filename, preds[0])
+
     
 if __name__ == '__main__':
     main()

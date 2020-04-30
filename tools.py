@@ -64,9 +64,9 @@ def load_img(img_path):
     ext = filename.split('.')[-1]
 
     if ext.lower() == 'png':
-        img = tf.image.decode_png(tf.read_file(img_path), channels=3)
+        img = tf.image.decode_png(tf.io.read_file(img_path), channels=3)
     elif ext.lower() == 'jpg':
-        img = tf.image.decode_jpeg(tf.read_file(img_path), channels=3)
+        img = tf.image.decode_jpeg(tf.io.read_file(img_path), channels=3)
     else:
         print('cannot process {0} file.'.format(file_type))
 
@@ -80,6 +80,6 @@ def preprocess(img, h, w):
     img -= IMG_MEAN
 
     pad_img = tf.image.pad_to_bounding_box(img, 0, 0, h, w)
-    pad_img = tf.expand_dims(pad_img, dim=0)
+    pad_img = tf.expand_dims(pad_img, 0)
 
     return pad_img
