@@ -105,8 +105,7 @@ def main():
     
     restore_var = tf.compat.v1.global_variables()
 
-    print(args.checkpoints)
-    ckpt = tf.train.get_checkpoint_state(args.checkpoints,'checkpoint.txt')
+    ckpt = tf.train.get_checkpoint_state(args.checkpoints)
     if ckpt and ckpt.model_checkpoint_path:
         loader = tf.compat.v1.train.Saver(var_list=restore_var)
         load_step = int(os.path.basename(ckpt.model_checkpoint_path).split('-')[1])
@@ -118,8 +117,6 @@ def main():
     
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
-    print(preds.shape)
-    preds[0] = preds[0].astype(np.uint8)
     imageio.imwrite(args.save_dir + filename, preds[0])
 
     
