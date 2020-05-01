@@ -2,6 +2,7 @@ import scipy.io as sio
 import numpy as np
 import tensorflow as tf
 import os
+import sys
 
 IMG_MEAN = np.array((103.939, 116.779, 123.68), dtype=np.float32)
 label_colours = [(128, 64, 128), (244, 35, 231), (69, 69, 69)
@@ -68,7 +69,8 @@ def load_img(img_path):
     elif ext.lower() == 'jpg':
         img = tf.image.decode_jpeg(tf.io.read_file(img_path), channels=3)
     else:
-        print('cannot process {0} file.'.format(file_type))
+        print('cannot process {0} file.'.format(ext.lower()))
+        sys.exit(0)
 
     return img, filename
 
