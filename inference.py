@@ -1,15 +1,7 @@
 from __future__ import print_function
 
 import argparse
-import os
-import sys
-import time
-import tensorflow as tf
-import numpy as np
-from scipy import misc
 import imageio
-import matplotlib.pyplot as plt
-
 from model import PSPNet101, PSPNet50
 from tools import *
 
@@ -108,7 +100,6 @@ def main():
     ckpt = tf.train.get_checkpoint_state(args.checkpoints)
     if ckpt and ckpt.model_checkpoint_path:
         loader = tf.compat.v1.train.Saver(var_list=restore_var)
-        load_step = int(os.path.basename(ckpt.model_checkpoint_path).split('-')[1])
         load(loader, sess, ckpt.model_checkpoint_path)
     else:
         print('No checkpoint file found.')

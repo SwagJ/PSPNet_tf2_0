@@ -109,7 +109,7 @@ class Network(object):
         return tf.compat.v1.get_variable(name, shape, trainable=self.trainable)
 
     def get_layer_name(self):
-        return layer_name
+        return layer.__name__
     def validate_padding(self, padding):
         '''Verifies that the padding is one of the supported ones.'''
         assert padding in ('SAME', 'VALID')
