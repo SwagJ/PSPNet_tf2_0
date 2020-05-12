@@ -59,7 +59,7 @@ def main():
         image_paths = list(base_path.iterdir())
     elif args.dataset == 'megadepth':
         image_paths = []
-        base_path = Path(args.data_path, 'phoenix/S6/zl548/MegaDepth_v1/')
+        base_path = Path(args.data_path, 'megadepth/phoenix/S6/zl548/MegaDepth_v1/')
         for sub_dir in list(base_path.iterdir()):
             num_dir = base_path / sub_dir
             for sub_dir2 in list(num_dir.iterdir()):
