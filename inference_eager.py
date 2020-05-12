@@ -48,7 +48,10 @@ def main():
 
     # Create network.
     net = PSPNet50(num_classes=num_classes)
-    net2 = PSPNet50(num_classes=num_classes)
+    net.trainable = False
+
+    if args.flipped_eval:
+        net2 = PSPNet50(num_classes=num_classes)
 
     # Load weights:
     ckpt = tf.train.get_checkpoint_state(args.checkpoints)
@@ -61,11 +64,11 @@ def main():
     #net.load_weights(ckpt.model_checkpoint_path, by_name=False, skip_mismatch=False)
     #net2.load_weights(ckpt.model_checkpoint_path, by_name=False, skip_mismatch=False)
 
-    raw_output = net(img)
+    raw_output = net.predict_on_batch(img)
 
     # Do flipped eval or not
     if args.flipped_eval:
-        flipped_output = tf.image.flip_left_right(tf.squeeze(net2(flipped_img)))
+        flipped_output = tf.image.flip_left_right(tf.squeeze(net2.predict_on_batch(flipped_img)))
         flipped_output = tf.expand_dims(flipped_output, dim=0)
         raw_output = tf.add_n([raw_output, flipped_output])
 

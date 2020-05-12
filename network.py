@@ -109,10 +109,13 @@ class Network(object):
         return tf.compat.v1.get_variable(name, shape, trainable=self.trainable)
 
     def get_layer_name(self):
+        print(layer.__name__)
         return layer.__name__
+
     def validate_padding(self, padding):
         '''Verifies that the padding is one of the supported ones.'''
         assert padding in ('SAME', 'VALID')
+
     @layer
     def zero_padding(self, input, paddings, name):
         pad_mat = np.array([[0,0], [paddings, paddings], [paddings, paddings], [0, 0]])

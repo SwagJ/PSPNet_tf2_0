@@ -106,6 +106,9 @@ def main():
     
     label_matrix, preds = sess.run([raw_output_up_print, pred])
 
+    # f = open("global_variables_graph_mode.txt", "w")
+    # print(tf.compat.v1.global_variables(),file=f)
+
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
     imageio.imwrite(args.save_dir + filename, preds[0])
