@@ -13,7 +13,7 @@ cityscapes_param = {'crop_size': [720, 720],
                     'model': PSPNet101}
 
 SAVE_DIR = './output/'
-SNAPSHOT_DIR = './model/'
+SNAPSHOT_DIR = './checkpoint/'
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="Reproduced PSPNet")

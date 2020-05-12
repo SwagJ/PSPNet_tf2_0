@@ -10,7 +10,7 @@ ADE20k_param = {'crop_size': [473, 473],
                 'num_classes': 150,
                 'model': PSPNet50}
 
-CHECKPOINTS_DIR = './model'
+CHECKPOINTS_DIR = './checkpoint'
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="Reproduced PSPNet")
