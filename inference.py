@@ -84,9 +84,9 @@ def main():
     # Predictions.
     raw_output_up = tf.compat.v1.image.resize_bilinear(raw_output, size=[h, w], align_corners=True)
     raw_output_up = tf.image.crop_to_bounding_box(raw_output_up, 0, 0, img_shape[0], img_shape[1])
-    raw_output_up = tf.argmax(raw_output_up, axis=3)
-    pred = decode_labels(raw_output_up, img_shape, num_classes)
-    
+    raw_output_up_print = tf.argmax(raw_output_up, axis=3)
+    pred = decode_labels(raw_output_up_print, img_shape, num_classes)
+
     # Init tf Session
     config = tf.compat.v1.ConfigProto()
     config.gpu_options.allow_growth = True
@@ -94,7 +94,7 @@ def main():
     init = tf.compat.v1.global_variables_initializer()
 
     sess.run(init)
-    
+
     restore_var = tf.compat.v1.global_variables()
 
     ckpt = tf.train.get_checkpoint_state(args.checkpoints)
@@ -104,12 +104,13 @@ def main():
     else:
         print('No checkpoint file found.')
     
-    preds = sess.run(pred)
-    
+    label_matrix, preds = sess.run([raw_output_up_print, pred])
+
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
     imageio.imwrite(args.save_dir + filename, preds[0])
+    # Save labels of pixels
+    np.save(args.save_dir+"/label_matrix.npy", label_matrix)
 
-    
 if __name__ == '__main__':
     main()
