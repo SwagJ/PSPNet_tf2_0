@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import argparse
 import imageio
-from model import PSPNet101, PSPNet50
+from model_graph import PSPNet101, PSPNet50
 from tools import *
 
 ADE20k_param = {'crop_size': [473, 473],
@@ -12,8 +12,8 @@ cityscapes_param = {'crop_size': [720, 720],
                     'num_classes': 19,
                     'model': PSPNet101}
 
-SAVE_DIR = './output/'
-SNAPSHOT_DIR = './checkpoint/'
+SAVE_DIR = 'output/'
+SNAPSHOT_DIR = 'checkpoint/'
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="Reproduced PSPNet")

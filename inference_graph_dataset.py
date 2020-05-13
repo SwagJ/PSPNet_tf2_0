@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import argparse
 import imageio
-from model import PSPNet50
+from model_graph import PSPNet50
 from tools import *
 from pathlib import Path
 
@@ -10,7 +10,7 @@ ADE20k_param = {'crop_size': [473, 473],
                 'num_classes': 150,
                 'model': PSPNet50}
 
-CHECKPOINTS_DIR = './checkpoint'
+CHECKPOINTS_DIR = 'checkpoint'
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="Reproduced PSPNet")
