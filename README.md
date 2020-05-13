@@ -41,9 +41,8 @@
    ```
    python inference_graph_dataset.py --data_path=DATA_PATH --dataset=coco  
    ``` 
+   where data_path is the same DATA_PATH set in SuperPoint, dataset can be chosen between `coco` and `megadepth`.
    Options:
    ```
-   --data_path: DATA_PATH set in SuperPoint
-   --dataset: coco or megadepth
    --flipped-eval 
    ```
