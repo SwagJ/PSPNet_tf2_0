@@ -47,22 +47,10 @@ def main():
     flipped_img = tf.expand_dims(flipped_img, 0)        # input if args.flipped-eval true
 
     # Create network.
-    net = PSPNet50(num_classes=num_classes)
+    net = PSPNet50(num_classes=num_classes, checkpoint_npy_path='checkpoint.npy')
     net.trainable = False
-
     if args.flipped_eval:
-        net2 = PSPNet50(num_classes=num_classes)
-
-    # Load weights:
-    ckpt = tf.train.get_checkpoint_state(args.checkpoints)
-    if ckpt and ckpt.model_checkpoint_path:
-        checkpoint = tf.train.Checkpoint(model=net)
-        checkpoint.restore(ckpt.model_checkpoint_path)
-    else:
-        print('No checkpoint file found.')
-
-    #net.load_weights(ckpt.model_checkpoint_path, by_name=False, skip_mismatch=False)
-    #net2.load_weights(ckpt.model_checkpoint_path, by_name=False, skip_mismatch=False)
+        net2 = PSPNet50(num_classes=num_classes,checkpoint_npy_path='checkpoint.npy')
 
     raw_output = net.predict_on_batch(img)
 

@@ -3,154 +3,562 @@ import numpy as np
 
 DEFAULT_DATAFORMAT = 'channels_last'
 
+class ConstantWeightsInitializer(object):
+    def __init__(self, path):
+        self.weights_dict = np.load(path,allow_pickle=True).item()
+    def conv2D_init(self, name, bias=False):
+        kernel_init = tf.constant_initializer(self.weights_dict[name+'/kernel'])
+        if bias:
+            bias_init = tf.constant_initializer(self.weights_dict[name+'/biases'])
+            return kernel_init,bias_init
+        else:
+            return kernel_init
+    def bn_init(self, name):
+        gamma_init = tf.constant_initializer(self.weights_dict[name+'/gamma'])
+        beta_init = tf.constant_initializer(self.weights_dict[name+'/beta'])
+        moving_mean_init = tf.constant_initializer(self.weights_dict[name+'/moving_mean'])
+        moving_variance_init = tf.constant_initializer(self.weights_dict[name+'/moving_variance'])
+        return gamma_init,beta_init,moving_mean_init,moving_variance_init
+
 class PSPNet50(tf.keras.Model):
-    def __init__(self, num_classes=150):
+    def __init__(self, num_classes=150, checkpoint_npy_path=None):
         super(PSPNet50, self).__init__()
-        self.conv1_1_3x3_s2 = tf.keras.layers.Conv2D(64, [3, 3], [2, 2], padding='SAME', use_bias=False, name='conv1_1_3x3_s2')
-        self.conv1_1_3x3_s2_bn = tf.keras.layers.BatchNormalization(momentum=0.95,epsilon=1e-5,name='conv1_1_3x3_s2_bn')
-        self.conv1_2_3x3 = tf.keras.layers.Conv2D(64, [3, 3], [1, 1], padding='SAME', use_bias=False, name='conv1_2_3x3')
-        self.conv1_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95,epsilon=1e-5,name='conv1_2_3x3_bn')
-        self.conv1_3_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], padding='SAME', use_bias=False,name='conv1_3_3x3')
-        self.conv1_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95,epsilon=1e-5,name='conv1_3_3x3_bn')
-        self.conv2_1_1x1_proj = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv2_1_1x1_proj')
-        self.conv2_1_1x1_proj_bn = tf.keras.layers.BatchNormalization(momentum=0.95,epsilon=1e-5,name='conv2_1_1x1_proj_bn')
+        if checkpoint_npy_path: # initializa with checkpoint
+            initializer = ConstantWeightsInitializer(checkpoint_npy_path)
+            # PSPNet layers with initializer
+            name = 'conv1_1_3x3_s2'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv1_1_3x3_s2 = tf.keras.layers.Conv2D(64, [3, 3], [2, 2], padding='SAME', use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv1_1_3x3_s2_bn'
+            gamma_init,beta_init,moving_mean_init,moving_variance_innit = initializer.bn_init(name)
+            self.conv1_1_3x3_s2_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv1_2_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv1_2_3x3 = tf.keras.layers.Conv2D(64, [3, 3], [1, 1], padding='SAME', use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv1_2_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv1_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv1_3_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv1_3_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], padding='SAME', use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv1_3_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv1_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv2_1_1x1_proj'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv2_1_1x1_proj = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv2_1_1x1_proj_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv2_1_1x1_proj_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv2_1_1x1_reduce = tf.keras.layers.Conv2D(64, [1,1], [1,1], use_bias=False,name='conv2_1_1x1_reduce')
-        self.conv2_1_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_1_1x1_reduce_bn')
-        self.conv2_1_3x3 = tf.keras.layers.Conv2D(64, [3,3], [1,1], use_bias=False,name='conv2_1_3x3')
-        self.conv2_1_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_1_3x3_bn')
-        self.conv2_1_1x1_increase = tf.keras.layers.Conv2D(256, [1,1], [1,1], use_bias=False,name='conv2_1_1x1_increase')
-        self.conv2_1_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_1_1x1_increase_bn')
+            name = 'conv2_1_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv2_1_1x1_reduce = tf.keras.layers.Conv2D(64, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv2_1_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv2_1_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv2_1_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv2_1_3x3 = tf.keras.layers.Conv2D(64, [3, 3], [1, 1], use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv2_1_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv2_1_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv2_1_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv2_1_1x1_increase = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv2_1_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv2_1_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv2_2_1x1_reduce = tf.keras.layers.Conv2D(64, [1,1], [1,1], use_bias=False,name='conv2_2_1x1_reduce')
-        self.conv2_2_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_2_1x1_reduce_bn')
-        self.conv2_2_3x3 = tf.keras.layers.Conv2D(64, [3,3], [1,1], use_bias=False,name='conv2_2_3x3')
-        self.conv2_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_2_3x3_bn')
-        self.conv2_2_1x1_increase = tf.keras.layers.Conv2D(256, [1,1], [1,1], use_bias=False,name='conv2_2_1x1_increase')
-        self.conv2_2_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_2_1x1_increase_bn')
+            name = 'conv2_2_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv2_2_1x1_reduce = tf.keras.layers.Conv2D(64, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv2_2_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv2_2_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv2_2_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv2_2_3x3 = tf.keras.layers.Conv2D(64, [3, 3], [1, 1], use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv2_2_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv2_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv2_2_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv2_2_1x1_increase = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv2_2_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv2_2_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv2_3_1x1_reduce = tf.keras.layers.Conv2D(64, [1, 1], [1, 1], use_bias=False,name='conv2_3_1x1_reduce')
-        self.conv2_3_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_3_1x1_reduce_bn')
-        self.conv2_3_3x3 = tf.keras.layers.Conv2D(64, [3, 3], [1, 1], use_bias=False,name='conv2_3_3x3')
-        self.conv2_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv2_3_3x3_bn')
-        self.conv2_3_1x1_increase = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv2_3_1x1_increase')
-        self.conv2_3_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_3_1x1_increase_bn')
+            name = 'conv2_3_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv2_3_1x1_reduce = tf.keras.layers.Conv2D(64, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv2_3_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv2_3_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv2_3_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv2_3_3x3 = tf.keras.layers.Conv2D(64, [3, 3], [1, 1], use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv2_3_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv2_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv2_3_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv2_3_1x1_increase = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv2_3_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv2_3_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv3_1_1x1_proj = tf.keras.layers.Conv2D(512, [1, 1], [2, 2], use_bias=False,name='conv3_1_1x1_proj')
-        self.conv3_1_1x1_proj_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_1_1x1_proj_bn')
+            name = 'conv3_1_1x1_proj'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_1_1x1_proj = tf.keras.layers.Conv2D(512, [1, 1], [2, 2], use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv3_1_1x1_proj_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_1_1x1_proj_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv3_1_1x1_reduce = tf.keras.layers.Conv2D(128, [1, 1], [2, 2], use_bias=False,name='conv3_1_1x1_reduce')
-        self.conv3_1_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_1_1x1_reduce_bn')
-        self.conv3_1_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], use_bias=False,name='conv3_1_3x3')
-        self.conv3_1_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv3_1_3x3_bn')
-        self.conv3_1_1x1_increase = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv3_1_1x1_increase')
-        self.conv3_1_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_1_1x1_increase_bn')
+            name = 'conv3_1_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_1_1x1_reduce = tf.keras.layers.Conv2D(128, [1, 1], [2, 2], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv3_1_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_1_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv3_1_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_1_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv3_1_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_1_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv3_1_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_1_1x1_increase = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv3_1_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_1_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv3_2_1x1_reduce = tf.keras.layers.Conv2D(128, [1, 1], [1, 1], use_bias=False,name='conv3_2_1x1_reduce')
-        self.conv3_2_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_2_1x1_reduce_bn')
-        self.conv3_2_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], use_bias=False,name='conv3_2_3x3')
-        self.conv3_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv3_2_3x3_bn')
-        self.conv3_2_1x1_increase = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False, name='conv3_2_1x1_increase')
-        self.conv3_2_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_2_1x1_increase_bn')
+            name = 'conv3_2_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_2_1x1_reduce = tf.keras.layers.Conv2D(128, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv3_2_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_2_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv3_2_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_2_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv3_2_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv3_2_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_2_1x1_increase = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv3_2_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_2_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv3_3_1x1_reduce = tf.keras.layers.Conv2D(128, [1, 1], [1, 1], use_bias=False,name='conv3_3_1x1_reduce')
-        self.conv3_3_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_3_1x1_reduce_bn')
-        self.conv3_3_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], use_bias=False,name='conv3_3_3x3')
-        self.conv3_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv3_3_3x3_bn')
-        self.conv3_3_1x1_increase = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv3_3_1x1_increase')
-        self.conv3_3_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_3_1x1_increase_bn')
+            name = 'conv3_3_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_3_1x1_reduce = tf.keras.layers.Conv2D(128, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv3_3_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_3_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv3_3_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_3_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv3_3_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv3_3_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_3_1x1_increase = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv3_3_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_3_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv3_4_1x1_reduce = tf.keras.layers.Conv2D(128, [1, 1], [1, 1], use_bias=False,name='conv3_4_1x1_reduce')
-        self.conv3_4_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_4_1x1_reduce_bn')
-        self.conv3_4_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], use_bias=False,name='conv3_4_3x3')
-        self.conv3_4_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv3_4_3x3_bn')
-        self.conv3_4_1x1_increase = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv3_4_1x1_increase')
-        self.conv3_4_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_4_1x1_increase_bn')
+            name = 'conv3_4_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_4_1x1_reduce = tf.keras.layers.Conv2D(128, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv3_4_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_4_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv3_4_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_4_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv3_4_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_4_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv3_4_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv3_4_1x1_increase = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv3_4_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv3_4_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv4_1_1x1_proj = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_1_1x1_proj')
-        self.conv4_1_1x1_proj_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_1_1x1_proj_bn')
+            name = 'conv4_1_1x1_proj'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_1_1x1_proj = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_1_1x1_proj_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_1_1x1_proj_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv4_1_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv4_1_1x1_reduce')
-        self.conv4_1_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_1_1x1_reduce_bn')
-        self.conv4_1_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False,name='conv4_1_3x3')
-        self.conv4_1_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv4_1_3x3_bn')
-        self.conv4_1_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_1_1x1_increase')
-        self.conv4_1_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_1_1x1_increase_bn')
+            name = 'conv4_1_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_1_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_1_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_1_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv4_1_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_1_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv4_1_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_1_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv4_1_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_1_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_1_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_1_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv4_2_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv4_2_1x1_reduce')
-        self.conv4_2_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_2_1x1_reduce_bn')
-        self.conv4_2_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False,name='conv4_2_3x3')
-        self.conv4_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv4_2_3x3_bn')
-        self.conv4_2_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_2_1x1_increase')
-        self.conv4_2_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_2_1x1_increase_bn')
+            name = 'conv4_2_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_2_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_2_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_2_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv4_2_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_2_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv4_2_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv4_2_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_2_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_2_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_2_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv4_3_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv4_3_1x1_reduce')
-        self.conv4_3_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_3_1x1_reduce_bn')
-        self.conv4_3_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False,name='conv4_3_3x3')
-        self.conv4_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv4_3_3x3_bn')
-        self.conv4_3_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_3_1x1_increase')
-        self.conv4_3_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_3_1x1_increase_bn')
+            name = 'conv4_3_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_3_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_3_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_3_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv4_3_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_3_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv4_3_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv4_3_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_3_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_3_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_3_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv4_4_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv4_4_1x1_reduce')
-        self.conv4_4_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_4_1x1_reduce_bn')
-        self.conv4_4_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False,name='conv4_4_3x3')
-        self.conv4_4_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv4_4_3x3_bn')
-        self.conv4_4_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_4_1x1_increase')
-        self.conv4_4_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_4_1x1_increase_bn')
+            name = 'conv4_4_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_4_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_4_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_4_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv4_4_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_4_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv4_4_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_4_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv4_4_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_4_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_4_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_4_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv4_5_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv4_5_1x1_reduce')
-        self.conv4_5_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_5_1x1_reduce_bn')
-        self.conv4_5_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False,name='conv4_5_3x3')
-        self.conv4_5_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv4_5_3x3_bn')
-        self.conv4_5_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_5_1x1_increase')
-        self.conv4_5_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_5_1x1_increase_bn')
+            name = 'conv4_5_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_5_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_5_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_5_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv4_5_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_5_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv4_5_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_5_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv4_5_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_5_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_5_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_5_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv4_6_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv4_6_1x1_reduce')
-        self.conv4_6_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_6_1x1_reduce_bn')
-        self.conv4_6_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False,name='conv4_6_3x3')
-        self.conv4_6_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv4_6_3x3_bn')
-        self.conv4_6_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_6_1x1_increase')
-        self.conv4_6_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_6_1x1_increase_bn')
+            name = 'conv4_6_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_6_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_6_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_6_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv4_6_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_6_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv4_6_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_6_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv4_6_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv4_6_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv4_6_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv4_6_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv5_1_1x1_proj = tf.keras.layers.Conv2D(2048, [1, 1], [1, 1], use_bias=False,name='conv5_1_1x1_proj')
-        self.conv5_1_1x1_proj_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv5_1_1x1_proj_bn')
+            name = 'conv5_1_1x1_proj'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_1_1x1_proj = tf.keras.layers.Conv2D(2048, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv5_1_1x1_proj_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_1_1x1_proj_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv5_1_1x1_reduce = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_1_1x1_reduce')
-        self.conv5_1_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_1_1x1_reduce_bn')
-        self.conv5_1_3x3 = tf.keras.layers.Conv2D(512, [3, 3], dilation_rate=4, use_bias=False,name='conv5_1_3x3')
-        self.conv5_1_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv5_1_3x3_bn')
-        self.conv5_1_1x1_increase = tf.keras.layers.Conv2D(2048, [1, 1], [1, 1], use_bias=False,name='conv5_1_1x1_increase')
-        self.conv5_1_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_1_1x1_increase_bn')
+            name = 'conv5_1_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_1_1x1_reduce = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv5_1_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_1_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv5_1_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_1_3x3 = tf.keras.layers.Conv2D(512, [3, 3], dilation_rate=4, use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv5_1_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_1_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv5_1_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_1_1x1_increase = tf.keras.layers.Conv2D(2048, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv5_1_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_1_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv5_2_1x1_reduce = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_2_1x1_reduce')
-        self.conv5_2_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_2_1x1_reduce_bn')
-        self.conv5_2_3x3 = tf.keras.layers.Conv2D(512, [3, 3], dilation_rate=4, use_bias=False,name='conv5_2_3x3')
-        self.conv5_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv5_2_3x3_bn')
-        self.conv5_2_1x1_increase = tf.keras.layers.Conv2D(2048, [1, 1], [1, 1], use_bias=False,name='conv5_2_1x1_increase')
-        self.conv5_2_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_2_1x1_increase_bn')
+            name = 'conv5_2_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_2_1x1_reduce = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv5_2_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_2_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv5_2_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_2_3x3 = tf.keras.layers.Conv2D(512, [3, 3], dilation_rate=4, use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv5_2_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv5_2_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_2_1x1_increase = tf.keras.layers.Conv2D(2048, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv5_2_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_2_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv5_3_1x1_reduce = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_3_1x1_reduce')
-        self.conv5_3_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_3_1x1_reduce_bn')
-        self.conv5_3_3x3 = tf.keras.layers.Conv2D(512, [3, 3], dilation_rate=4, use_bias=False,name='conv5_3_3x3')
-        self.conv5_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv5_3_3x3_bn')
-        self.conv5_3_1x1_increase = tf.keras.layers.Conv2D(2048, [1, 1], [1, 1], use_bias=False,name='conv5_3_1x1_increase')
-        self.conv5_3_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_3_1x1_increase_bn')
+            name = 'conv5_3_1x1_reduce'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_3_1x1_reduce = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv5_3_1x1_reduce_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_3_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv5_3_3x3'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_3_3x3 = tf.keras.layers.Conv2D(512, [3, 3], dilation_rate=4, use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv5_3_3x3_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv5_3_1x1_increase'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_3_1x1_increase = tf.keras.layers.Conv2D(2048, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv5_3_1x1_increase_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_3_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv5_3_pool1_conv = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_3_pool1_conv')
-        self.conv5_3_pool1_conv_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv5_3_pool1_conv_bn')
+            name = 'conv5_3_pool1_conv'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_3_pool1_conv = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv5_3_pool1_conv_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_3_pool1_conv_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv5_3_pool2_conv = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_3_pool2_conv')
-        self.conv5_3_pool2_conv_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv5_3_pool2_conv_bn')
+            name = 'conv5_3_pool2_conv'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_3_pool2_conv = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv5_3_pool2_conv_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_3_pool2_conv_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv5_3_pool3_conv = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_3_pool3_conv')
-        self.conv5_3_pool3_conv_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_3_pool3_conv_bn')
+            name = 'conv5_3_pool3_conv'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_3_pool3_conv = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv5_3_pool3_conv_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_3_pool3_conv_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv5_3_pool6_conv = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_3_pool6_conv')
-        self.conv5_3_pool6_conv_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_3_pool6_conv_bn')
+            name = 'conv5_3_pool6_conv'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_3_pool6_conv = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name=name,kernel_initializer=kernel_init)
+            name = 'conv5_3_pool6_conv_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_3_pool6_conv_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
 
-        self.conv5_4 = tf.keras.layers.Conv2D(512, [3, 3], [1, 1], padding='SAME', use_bias=False,name='conv5_4')
-        self.conv5_4_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_4_bn')
-        self.conv6 = tf.keras.layers.Conv2D(num_classes, [1, 1], [1, 1], use_bias=True,name='conv6')
+            name = 'conv5_4'
+            kernel_init = initializer.conv2D_init(name=name)
+            self.conv5_4 = tf.keras.layers.Conv2D(512, [3, 3], [1, 1], padding='SAME', use_bias=False, name=name,kernel_initializer=kernel_init)
+            name = 'conv5_4_bn'
+            gamma_init, beta_init, moving_mean_init, moving_variance_innit = initializer.bn_init(name)
+            self.conv5_4_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name=name,gamma_initializer=gamma_init,beta_initializer=beta_init,moving_mean_initializer=moving_mean_init,moving_variance_initializer=moving_variance_innit)
+            name = 'conv6'
+            kernel_init, bias_init = initializer.conv2D_init(name=name,bias=True)
+            self.conv6 = tf.keras.layers.Conv2D(num_classes, [1, 1], [1, 1], use_bias=True,name=name,kernel_initializer=kernel_init, bias_initializer=bias_init)
+        else:
+            self.conv1_1_3x3_s2 = tf.keras.layers.Conv2D(64, [3, 3], [2, 2], padding='SAME', use_bias=False, name='conv1_1_3x3_s2')
+            self.conv1_1_3x3_s2_bn = tf.keras.layers.BatchNormalization(momentum=0.95,epsilon=1e-5,name='conv1_1_3x3_s2_bn')
+            self.conv1_2_3x3 = tf.keras.layers.Conv2D(64, [3, 3], [1, 1], padding='SAME', use_bias=False, name='conv1_2_3x3')
+            self.conv1_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95,epsilon=1e-5,name='conv1_2_3x3_bn')
+            self.conv1_3_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], padding='SAME', use_bias=False,name='conv1_3_3x3')
+            self.conv1_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95,epsilon=1e-5,name='conv1_3_3x3_bn')
+            self.conv2_1_1x1_proj = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv2_1_1x1_proj')
+            self.conv2_1_1x1_proj_bn = tf.keras.layers.BatchNormalization(momentum=0.95,epsilon=1e-5,name='conv2_1_1x1_proj_bn')
+
+            self.conv2_1_1x1_reduce = tf.keras.layers.Conv2D(64, [1,1], [1,1], use_bias=False,name='conv2_1_1x1_reduce')
+            self.conv2_1_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_1_1x1_reduce_bn')
+            self.conv2_1_3x3 = tf.keras.layers.Conv2D(64, [3,3], [1,1], use_bias=False,name='conv2_1_3x3')
+            self.conv2_1_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_1_3x3_bn')
+            self.conv2_1_1x1_increase = tf.keras.layers.Conv2D(256, [1,1], [1,1], use_bias=False,name='conv2_1_1x1_increase')
+            self.conv2_1_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_1_1x1_increase_bn')
+
+            self.conv2_2_1x1_reduce = tf.keras.layers.Conv2D(64, [1,1], [1,1], use_bias=False,name='conv2_2_1x1_reduce')
+            self.conv2_2_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_2_1x1_reduce_bn')
+            self.conv2_2_3x3 = tf.keras.layers.Conv2D(64, [3,3], [1,1], use_bias=False,name='conv2_2_3x3')
+            self.conv2_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_2_3x3_bn')
+            self.conv2_2_1x1_increase = tf.keras.layers.Conv2D(256, [1,1], [1,1], use_bias=False,name='conv2_2_1x1_increase')
+            self.conv2_2_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_2_1x1_increase_bn')
+
+            self.conv2_3_1x1_reduce = tf.keras.layers.Conv2D(64, [1, 1], [1, 1], use_bias=False,name='conv2_3_1x1_reduce')
+            self.conv2_3_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_3_1x1_reduce_bn')
+            self.conv2_3_3x3 = tf.keras.layers.Conv2D(64, [3, 3], [1, 1], use_bias=False,name='conv2_3_3x3')
+            self.conv2_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv2_3_3x3_bn')
+            self.conv2_3_1x1_increase = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv2_3_1x1_increase')
+            self.conv2_3_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv2_3_1x1_increase_bn')
+
+            self.conv3_1_1x1_proj = tf.keras.layers.Conv2D(512, [1, 1], [2, 2], use_bias=False,name='conv3_1_1x1_proj')
+            self.conv3_1_1x1_proj_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_1_1x1_proj_bn')
+
+            self.conv3_1_1x1_reduce = tf.keras.layers.Conv2D(128, [1, 1], [2, 2], use_bias=False,name='conv3_1_1x1_reduce')
+            self.conv3_1_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_1_1x1_reduce_bn')
+            self.conv3_1_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], use_bias=False,name='conv3_1_3x3')
+            self.conv3_1_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv3_1_3x3_bn')
+            self.conv3_1_1x1_increase = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv3_1_1x1_increase')
+            self.conv3_1_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_1_1x1_increase_bn')
+
+            self.conv3_2_1x1_reduce = tf.keras.layers.Conv2D(128, [1, 1], [1, 1], use_bias=False,name='conv3_2_1x1_reduce')
+            self.conv3_2_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_2_1x1_reduce_bn')
+            self.conv3_2_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], use_bias=False,name='conv3_2_3x3')
+            self.conv3_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv3_2_3x3_bn')
+            self.conv3_2_1x1_increase = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False, name='conv3_2_1x1_increase')
+            self.conv3_2_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_2_1x1_increase_bn')
+
+            self.conv3_3_1x1_reduce = tf.keras.layers.Conv2D(128, [1, 1], [1, 1], use_bias=False,name='conv3_3_1x1_reduce')
+            self.conv3_3_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_3_1x1_reduce_bn')
+            self.conv3_3_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], use_bias=False,name='conv3_3_3x3')
+            self.conv3_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv3_3_3x3_bn')
+            self.conv3_3_1x1_increase = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv3_3_1x1_increase')
+            self.conv3_3_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_3_1x1_increase_bn')
+
+            self.conv3_4_1x1_reduce = tf.keras.layers.Conv2D(128, [1, 1], [1, 1], use_bias=False,name='conv3_4_1x1_reduce')
+            self.conv3_4_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_4_1x1_reduce_bn')
+            self.conv3_4_3x3 = tf.keras.layers.Conv2D(128, [3, 3], [1, 1], use_bias=False,name='conv3_4_3x3')
+            self.conv3_4_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv3_4_3x3_bn')
+            self.conv3_4_1x1_increase = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv3_4_1x1_increase')
+            self.conv3_4_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv3_4_1x1_increase_bn')
+
+            self.conv4_1_1x1_proj = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_1_1x1_proj')
+            self.conv4_1_1x1_proj_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_1_1x1_proj_bn')
+
+            self.conv4_1_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv4_1_1x1_reduce')
+            self.conv4_1_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_1_1x1_reduce_bn')
+            self.conv4_1_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False,name='conv4_1_3x3')
+            self.conv4_1_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv4_1_3x3_bn')
+            self.conv4_1_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_1_1x1_increase')
+            self.conv4_1_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_1_1x1_increase_bn')
+
+            self.conv4_2_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv4_2_1x1_reduce')
+            self.conv4_2_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_2_1x1_reduce_bn')
+            self.conv4_2_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False,name='conv4_2_3x3')
+            self.conv4_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv4_2_3x3_bn')
+            self.conv4_2_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_2_1x1_increase')
+            self.conv4_2_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_2_1x1_increase_bn')
+
+            self.conv4_3_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv4_3_1x1_reduce')
+            self.conv4_3_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_3_1x1_reduce_bn')
+            self.conv4_3_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False,name='conv4_3_3x3')
+            self.conv4_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv4_3_3x3_bn')
+            self.conv4_3_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_3_1x1_increase')
+            self.conv4_3_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_3_1x1_increase_bn')
+
+            self.conv4_4_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv4_4_1x1_reduce')
+            self.conv4_4_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_4_1x1_reduce_bn')
+            self.conv4_4_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False,name='conv4_4_3x3')
+            self.conv4_4_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv4_4_3x3_bn')
+            self.conv4_4_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_4_1x1_increase')
+            self.conv4_4_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_4_1x1_increase_bn')
+
+            self.conv4_5_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv4_5_1x1_reduce')
+            self.conv4_5_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_5_1x1_reduce_bn')
+            self.conv4_5_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False,name='conv4_5_3x3')
+            self.conv4_5_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv4_5_3x3_bn')
+            self.conv4_5_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_5_1x1_increase')
+            self.conv4_5_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_5_1x1_increase_bn')
+
+            self.conv4_6_1x1_reduce = tf.keras.layers.Conv2D(256, [1, 1], [1, 1], use_bias=False,name='conv4_6_1x1_reduce')
+            self.conv4_6_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_6_1x1_reduce_bn')
+            self.conv4_6_3x3 = tf.keras.layers.Conv2D(256, [3, 3], dilation_rate=2, use_bias=False,name='conv4_6_3x3')
+            self.conv4_6_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv4_6_3x3_bn')
+            self.conv4_6_1x1_increase = tf.keras.layers.Conv2D(1024, [1, 1], [1, 1], use_bias=False,name='conv4_6_1x1_increase')
+            self.conv4_6_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv4_6_1x1_increase_bn')
+
+            self.conv5_1_1x1_proj = tf.keras.layers.Conv2D(2048, [1, 1], [1, 1], use_bias=False,name='conv5_1_1x1_proj')
+            self.conv5_1_1x1_proj_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv5_1_1x1_proj_bn')
+
+            self.conv5_1_1x1_reduce = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_1_1x1_reduce')
+            self.conv5_1_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_1_1x1_reduce_bn')
+            self.conv5_1_3x3 = tf.keras.layers.Conv2D(512, [3, 3], dilation_rate=4, use_bias=False,name='conv5_1_3x3')
+            self.conv5_1_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv5_1_3x3_bn')
+            self.conv5_1_1x1_increase = tf.keras.layers.Conv2D(2048, [1, 1], [1, 1], use_bias=False,name='conv5_1_1x1_increase')
+            self.conv5_1_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_1_1x1_increase_bn')
+
+            self.conv5_2_1x1_reduce = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_2_1x1_reduce')
+            self.conv5_2_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_2_1x1_reduce_bn')
+            self.conv5_2_3x3 = tf.keras.layers.Conv2D(512, [3, 3], dilation_rate=4, use_bias=False,name='conv5_2_3x3')
+            self.conv5_2_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv5_2_3x3_bn')
+            self.conv5_2_1x1_increase = tf.keras.layers.Conv2D(2048, [1, 1], [1, 1], use_bias=False,name='conv5_2_1x1_increase')
+            self.conv5_2_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_2_1x1_increase_bn')
+
+            self.conv5_3_1x1_reduce = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_3_1x1_reduce')
+            self.conv5_3_1x1_reduce_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_3_1x1_reduce_bn')
+            self.conv5_3_3x3 = tf.keras.layers.Conv2D(512, [3, 3], dilation_rate=4, use_bias=False,name='conv5_3_3x3')
+            self.conv5_3_3x3_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv5_3_3x3_bn')
+            self.conv5_3_1x1_increase = tf.keras.layers.Conv2D(2048, [1, 1], [1, 1], use_bias=False,name='conv5_3_1x1_increase')
+            self.conv5_3_1x1_increase_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_3_1x1_increase_bn')
+
+            self.conv5_3_pool1_conv = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_3_pool1_conv')
+            self.conv5_3_pool1_conv_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv5_3_pool1_conv_bn')
+
+            self.conv5_3_pool2_conv = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_3_pool2_conv')
+            self.conv5_3_pool2_conv_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5, name='conv5_3_pool2_conv_bn')
+
+            self.conv5_3_pool3_conv = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_3_pool3_conv')
+            self.conv5_3_pool3_conv_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_3_pool3_conv_bn')
+
+            self.conv5_3_pool6_conv = tf.keras.layers.Conv2D(512, [1, 1], [1, 1], use_bias=False,name='conv5_3_pool6_conv')
+            self.conv5_3_pool6_conv_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_3_pool6_conv_bn')
+
+            self.conv5_4 = tf.keras.layers.Conv2D(512, [3, 3], [1, 1], padding='SAME', use_bias=False,name='conv5_4')
+            self.conv5_4_bn = tf.keras.layers.BatchNormalization(momentum=0.95, epsilon=1e-5,name='conv5_4_bn')
+            self.conv6 = tf.keras.layers.Conv2D(num_classes, [1, 1], [1, 1], use_bias=True,name='conv6')
 
     def call(self, input, is_training=False):
         output_conv1_1_3x3_s2 = self.conv1_1_3x3_s2(input)
