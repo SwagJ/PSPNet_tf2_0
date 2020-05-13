@@ -9,24 +9,19 @@ ADE20k_param = {'crop_size': [473, 473],
                 'num_classes': 150}
 
 SAVE_DIR = './output/'
-SNAPSHOT_DIR = './checkpoint/'
+CHECKPOINT_FILE = './checkpoint.npy'
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="Reproduced PSPNet")
     parser.add_argument("--img-path", type=str, default='',
                         help="Path to the RGB image file.")
-    parser.add_argument("--checkpoints", type=str, default=SNAPSHOT_DIR,
+    parser.add_argument("--checkpoints", type=str, default=CHECKPOINT_FILE,
                         help="Path to restore weights.")
     parser.add_argument("--save-dir", type=str, default=SAVE_DIR,
                         help="Path to save output.")
     parser.add_argument("--flipped-eval", action="store_true",
                         help="whether to evaluate with flipped img.")
     return parser.parse_args()
-
-
-def load(saver, sess, ckpt_path):
-    saver.restore(sess, ckpt_path)
-    print("Restored model parameters from {}".format(ckpt_path))
 
 
 def main():
@@ -47,10 +42,10 @@ def main():
     flipped_img = tf.expand_dims(flipped_img, 0)        # input if args.flipped-eval true
 
     # Create network.
-    net = PSPNet50(num_classes=num_classes, checkpoint_npy_path='checkpoint.npy')
+    net = PSPNet50(num_classes=num_classes, checkpoint_npy_path=args.checkpoints)
     net.trainable = False
     if args.flipped_eval:
-        net2 = PSPNet50(num_classes=num_classes,checkpoint_npy_path='checkpoint.npy')
+        net2 = PSPNet50(num_classes=num_classes,checkpoint_npy_path=args.checkpoints)
 
     raw_output = net.predict_on_batch(img)
 
