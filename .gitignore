@@ -2,6 +2,8 @@
 ./cityscapes_model
 model.ckpt-*
 checkpoint
+output
+checkpoint.npy
 *.pyc
 __pycache__
 
