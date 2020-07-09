@@ -15,7 +15,8 @@ CHECKPOINTS_DIR = 'checkpoint'
 def get_arguments():
     parser = argparse.ArgumentParser(description="Reproduced PSPNet")
     parser.add_argument("--data_path", type=str, default='',
-                        help="Path to the datasets' directory.")
+                        help="Path to the datasets' directory.",
+                        required=True)
     parser.add_argument("--flipped_eval", action="store_true",
                         help="whether to evaluate with flipped img.")
     parser.add_argument("--dataset", type=str, default='',
@@ -66,8 +67,7 @@ def main():
                 dense_dir = num_dir / sub_dir2
                 imgs_path = dense_dir / 'imgs'
                 if imgs_path.exists():
-                    for p in list(imgs_path.iterdir()):
-                        image_paths.append(p)
+                    image_paths.extend([x for x in imgs_path.iterdir() if not os.fspath(x).startswith(".")])
 
     for image_path in image_paths:
         print(image_path)
@@ -97,8 +97,8 @@ def main():
         # Predictions.
         raw_output_up = tf.compat.v1.image.resize_bilinear(raw_output, size=[h, w], align_corners=True)
         raw_output_up = tf.image.crop_to_bounding_box(raw_output_up, 0, 0, img_shape[0], img_shape[1])
-        raw_output_up = tf.argmax(raw_output_up, axis=3)
-        pred = decode_labels(raw_output_up, img_shape, num_classes)
+        raw_output_up_print = tf.argmax(raw_output_up, axis=3)
+        # pred = decode_labels(raw_output_up_print, img_shape, num_classes)
 
         # Init tf Session
         config = tf.compat.v1.ConfigProto()
@@ -117,13 +117,18 @@ def main():
         else:
             print('No checkpoint file found.')
 
-        preds = sess.run(pred)
+        # label_matrix, preds = sess.run([raw_output_up_print, pred])
+        label_matrix = sess.run(raw_output_up_print)
 
-        save_dir = image_path.parent.parent / 'labels'
+        save_dir = image_path.parent.parent / 'semantic_labels'
         if not os.path.exists(os.fspath(save_dir)):
             os.makedirs(os.fspath(save_dir))
         print(os.fspath(save_dir))
-        imageio.imwrite(os.fspath(save_dir) + '/' + filename, preds[0])
+        # imageio.imwrite(os.fspath(save_dir) + '/' + filename, preds[0])
+        # Save labels of pixels
+        img_name = filename.split('.')[0]
+        print(os.fspath(save_dir) + '/' + str(img_name) + '_labels.npy')
+        np.save(os.fspath(save_dir) + '/' + str(img_name) + '_labels.npy', label_matrix)
 
 
 if __name__ == '__main__':

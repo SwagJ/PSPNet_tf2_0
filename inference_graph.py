@@ -2,15 +2,12 @@ from __future__ import print_function
 
 import argparse
 import imageio
-from model_graph import PSPNet101, PSPNet50
+from model_graph import PSPNet50
 from tools import *
 
 ADE20k_param = {'crop_size': [473, 473],
                 'num_classes': 150, 
                 'model': PSPNet50}
-cityscapes_param = {'crop_size': [720, 720],
-                    'num_classes': 19,
-                    'model': PSPNet101}
 
 SAVE_DIR = 'output/'
 SNAPSHOT_DIR = 'checkpoint/'
@@ -25,9 +22,6 @@ def get_arguments():
                         help="Path to save output.")
     parser.add_argument("--flipped-eval", action="store_true",
                         help="whether to evaluate with flipped img.")
-    parser.add_argument("--dataset", type=str, default='',
-                        choices=['ade20k', 'cityscapes'],
-                        required=True)
 
     return parser.parse_args()
 
@@ -51,10 +45,7 @@ def main():
     tf.compat.v1.disable_eager_execution()
 
     # load parameters
-    if args.dataset == 'ade20k':
-        param = ADE20k_param
-    elif args.dataset == 'cityscapes':
-        param = cityscapes_param
+    param = ADE20k_param
 
     crop_size = param['crop_size']
     num_classes = param['num_classes']
@@ -113,7 +104,8 @@ def main():
         os.makedirs(args.save_dir)
     imageio.imwrite(args.save_dir + filename, preds[0])
     # Save labels of pixels
-    np.save(args.save_dir+"/label_matrix.npy", label_matrix)
+    img_name = filename.split('.')[0]
+    np.save(args.save_dir+'/'+img_name+'_label_matrix.npy', label_matrix)
 
 if __name__ == '__main__':
     main()

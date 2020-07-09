@@ -35,9 +35,10 @@ def main():
 
     # preprocess images
     img, filename = load_img(args.img_path)
+    img = tf.expand_dims(img, 0)
     img_shape = tf.shape(img)
-    h, w = (tf.maximum(crop_size[0], img_shape[0]), tf.maximum(crop_size[1], img_shape[1]))
-    img = preprocess(img, h, w)     # input if args.flipped-eval false
+    h, w = (tf.maximum(crop_size[0], img_shape[1]), tf.maximum(crop_size[1], img_shape[2]))
+    img = preprocess_eager(img, h, w)     # input if args.flipped-eval false
     flipped_img = tf.image.flip_left_right(tf.squeeze(img))
     flipped_img = tf.expand_dims(flipped_img, 0)        # input if args.flipped-eval true
 
@@ -57,15 +58,15 @@ def main():
 
     # Predictions.
     raw_output_up = tf.image.resize(raw_output, size=[h, w])
-    raw_output_up = tf.image.crop_to_bounding_box(raw_output_up, 0, 0, img_shape[0], img_shape[1])
+    raw_output_up = tf.image.crop_to_bounding_box(raw_output_up, 0, 0, img_shape[1], img_shape[2])
     raw_output_up = tf.argmax(raw_output_up, axis=3)
-    pred = decode_labels(raw_output_up, img_shape, num_classes)
+    pred = decode_labels_eager(raw_output_up, img_shape, num_classes)
 
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
     imageio.imwrite(args.save_dir + filename, pred[0])
     # Save labels of pixels
-    np.save(args.save_dir + "/label_matrix.npy", raw_output_up)
+    np.save(args.save_dir + '/'+ filename + '_label_matrix.npy', raw_output_up)
 
 if __name__ == '__main__':
     main()

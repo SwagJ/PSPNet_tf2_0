@@ -41,8 +41,23 @@ def decode_labels(mask, img_shape, num_classes):
     onehot_output = tf.reshape(onehot_output, (-1, num_classes))
     pred = tf.matmul(onehot_output, color_mat)
     pred = tf.reshape(pred, (1, img_shape[0], img_shape[1], 3))
-    
+
     return pred
+
+def decode_labels_eager(mask, img_shape, num_classes):
+    if num_classes == 150:
+        color_table = read_labelcolours(matfn)
+    else:
+        color_table = label_colours
+
+    color_mat = tf.constant(color_table, dtype=tf.float32)
+    onehot_output = tf.one_hot(mask, depth=num_classes)
+    onehot_output = tf.reshape(onehot_output, (-1, num_classes))
+    pred = tf.matmul(onehot_output, color_mat)
+    pred = tf.reshape(pred, (1, img_shape[1], img_shape[2], 3))
+
+    return pred
+
 
 def prepare_label(input_batch, new_size, num_classes, one_hot=True):
     with tf.name_scope('label_encode'):
@@ -83,5 +98,16 @@ def preprocess(img, h, w):
 
     pad_img = tf.image.pad_to_bounding_box(img, 0, 0, h, w)
     pad_img = tf.expand_dims(pad_img, 0)
+
+    return pad_img
+
+def preprocess_eager(img, h, w):         # for batch input
+    # Convert RGB to BGR
+    img_r, img_g, img_b = tf.split(axis=3, num_or_size_splits=3, value=img)
+    img = tf.cast(tf.concat(axis=3, values=[img_b, img_g, img_r]), dtype=tf.float32)
+    # Extract mean.
+    img -= IMG_MEAN
+
+    pad_img = tf.image.pad_to_bounding_box(img, 0, 0, h, w)
 
     return pad_img
