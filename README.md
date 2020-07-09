@@ -5,8 +5,8 @@
   code has been updated to TensorFlow 2.1 and adapted for our project. Moreover, eager execution is supported.
 
 ## Install
-   - Get restore checkpoint from [Google Drive](https://drive.google.com/drive/folders/1S90PWzXEX_GNzulG1f2eTHvsruITgqsm) 
-   and put into `checkpoint` directory. Note: Select the checkpoint corresponding to the dataset.
+   - Get restore checkpoint from [Google Drive](https://drive.google.com/drive/folders/1w2aYfoU2lZkmH4ZZFTbRW1D2iIJnjXN6) 
+   and put into `checkpoint` directory directly under PSPNet-tensorflow. 
    - Get the `.npy` format checkpoint converted from the above `.ckpt` files from 
    [Google Drive](https://drive.google.com/file/d/1KHp-41Y50RJlv1hQ1TpLbio0uWjIwc-z/view?usp=sharing) 
    and put directly under the project directory. Note: `.npy` file is created by `ckpt2npy.py`.
@@ -28,7 +28,7 @@
 ### Graph mode
 #### Inference on single image
    ```
-   python inference_graph.py --img-path=./input/test1.npg --dataset=ade20k  
+   python inference_graph.py --img-path=./input/test1.npg  
    ```
    Options:
    ```
